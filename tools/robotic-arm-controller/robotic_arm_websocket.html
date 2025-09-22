@@ -1,0 +1,1554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robotic Arm Controller</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        .logo-section {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .logo-placeholder {
+            width: 420px;
+            height: 100px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+
+        #logoText {
+            pointer-events: none;
+        }
+
+        #logoImage {
+            border-radius: 8px;
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .app-title {
+            font-size: 28px;
+            font-weight: bold;
+            background: linear-gradient(45deg, #007bff, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .status-disconnected {
+            background: #dc3545;
+            color: white;
+        }
+
+        .status-connecting {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .status-connected {
+            background: #28a745;
+            color: white;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 2.5fr 1.5fr;
+            gap: 20px;
+            height: calc(100vh - 140px);
+        }
+
+        .left-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .compact-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .compact-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 15px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .joints-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .right-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .compact-section-title {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #007bff;
+            border-bottom: 1px solid #007bff;
+            padding-bottom: 5px;
+        }
+
+        .btn {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 12px;
+            margin: 2px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #007bff, #0056b3);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-success {
+            background: linear-gradient(45deg, #28a745, #1e7e34);
+            color: white;
+        }
+
+        .btn-danger {
+            background: linear-gradient(45deg, #dc3545, #bd2130);
+            color: white;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .input-group {
+            margin-bottom: 10px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 3px;
+            font-weight: bold;
+            color: #555;
+            font-size: 12px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 8px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 14px;
+        }
+
+        .joint-control {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .joint-control.active {
+            border-color: #007bff;
+            background: rgba(0, 123, 255, 0.05);
+        }
+
+        .joint-header {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .joint-name {
+            font-weight: bold;
+            font-size: 16px;
+            color: #333;
+            background: none;
+            border: none;
+            padding: 5px;
+            border-radius: 5px;
+        }
+
+        .joint-angle-input {
+            width: 80px;
+            padding: 8px 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .joint-angle {
+            background: linear-gradient(45deg, #007bff, #0056b3);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .slider {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 25px;
+            appearance: none;
+            outline: none;
+        }
+
+        .slider::-webkit-slider-thumb {
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            background: #007bff;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .range-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 5px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .arm-visualization {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 300px;
+        }
+
+        .recording-section {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #dee2e6;
+        }
+
+        .recording-section .btn {
+            padding: 6px 10px;
+            font-size: 11px;
+            margin: 1px;
+        }
+
+        .recording-status {
+            margin-top: 8px;
+            font-size: 11px;
+            color: #666;
+            text-align: center;
+        }
+
+        .emergency-stop {
+            position: fixed;
+            top: 50%;
+            right: 30px;
+            transform: translateY(-50%);
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: #dc3545;
+            border: 4px solid white;
+            color: white;
+            font-weight: bold;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            z-index: 1000;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 600px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover {
+            color: #007bff;
+        }
+
+		.file-operations {
+			margin-top: 8px;
+			border: 3px solid #dee2e6;
+			border-radius: 8px;
+			padding: 8px;
+			background: rgba(248, 249, 250, 0.8);
+		}
+
+		.file-ops-label {
+			font-size: 10px;
+			font-weight: bold;
+			color: #6c757d;
+			margin-bottom: 4px;
+		}
+
+		.file-ops-buttons {
+			display: flex;
+			gap: 5px;
+			flex-wrap: wrap;
+		}
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+            
+            .compact-controls {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+            
+            .joint-header {
+                grid-template-columns: 1fr auto;
+            }
+            
+            .emergency-stop {
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                top: auto;
+                transform: none;
+                width: 60px;
+                height: 60px;
+                font-size: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo-section">
+                <div class="logo-placeholder">
+                    <img src="ils-logo.png" style="height: 80px; width: 300px;; alt="Infinity Learning Space Logo">
+                </div>
+            </div>
+            <div class="app-title">Robotic Arm Controller</div>
+            <div class="connection-status status-disconnected" id="connectionStatus">
+                <span id="statusText">Disconnected</span>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <div class="left-panel">
+                <div class="compact-controls">
+                    <div class="compact-panel">
+                        <div class="compact-section-title">Connection</div>
+                        <div class="input-group">
+                            <label for="ipAddress">Device IP:</label>
+                            <input type="text" id="ipAddress" placeholder="192.168.1.100" value="192.168.1.100">
+                        </div>
+                        <button class="btn btn-success" id="connectBtn">Connect WebSocket</button>
+                    </div>
+
+                    <div class="compact-panel">
+                        <div class="compact-section-title">Configuration</div>
+     			<div class="file-operations">	
+						<div class="file-ops-label">Robot Arm Types:</div>
+						<div class="file-ops-buttons">
+						   <button class="btn btn-primary dof-btn active" data-dof="4">4 DOF</button>
+							<button class="btn btn-secondary dof-btn" data-dof="5">5 DOF</button>
+							<button class="btn btn-secondary dof-btn" data-dof="6">6 DOF</button>
+								</div>
+						  </div>
+                         			<div class="file-operations">	
+						<div class="file-ops-label">Configs:</div>
+						<div class="file-ops-buttons">
+                            <button class="btn btn-primary" id="homeBtn">Home</button>
+                            <!--<button class="btn btn-secondary" id="settingsBtn">Settings</button> -->
+                            <button class="btn btn-secondary" id="resetBtn">Reset</button>
+                        </div>
+						</div>
+                        
+           
+				<div class="file-operations">	
+						<div class="file-ops-label">Recordings:</div>
+						<div class="file-ops-buttons">
+                                <button class="btn btn-success" id="recordBtn">Record</button>
+                                <button class="btn btn-danger" id="stopRecordBtn" style="display:none;">Stop</button>
+								<button class="btn btn-primary" id="playbackBtn">Playback</button>
+                                <button class="btn btn-secondary" id="clearRecordBtn">Clear</button>
+                            </div>
+							</div>
+
+						<div class="file-operations">
+						<div class="file-ops-label">File Operations:</div>
+						<div class="file-ops-buttons">
+							<button class="btn btn-success" id="exportRecordBtn">Export</button>
+							<button class="btn btn-primary" id="importRecordBtn">Import</button>
+							<button class="btn btn-secondary" id="manageRecordBtn">Manage</button>
+						</div>
+					</div>
+                            <div class="recording-status" id="recordingStatus"></div>
+      
+                    </div>
+                </div>
+
+                <div class="joints-panel">
+                    <div class="compact-section-title">Joint Controls</div>
+                    <div id="jointControls"></div>
+                </div>
+            </div>
+
+            <div class="right-panel">
+                <div class="compact-section-title">Arm Visualization</div>
+                <div id="armStatusIndicators" style="font-size: 20px; margin-bottom: 10px; max-height: 160px; overflow-y: auto;"></div>
+                
+                <div class="arm-visualization">
+                    <svg id="armDiagram" width="100%" height="100%" viewBox="0 0 180 160" preserveAspectRatio="xMidYMid meet">
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button class="emergency-stop" id="emergencyStop">EMERGENCY<br>STOP</button>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <span class="close" id="closeSettings">&times;</span>
+            <h2>Settings</h2>
+            <div class="input-group">
+                <label for="logoUpload">Company Logo:</label>
+                <input type="file" id="logoUpload" accept="image/*">
+                <small style="color: #666;">Upload your logo - it will auto-resize to fit</small>
+            </div>
+            <div style="margin-top: 20px;">
+                <button class="btn btn-primary" id="saveSettingsBtn">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recording Management Modal -->
+    <div id="recordingModal" class="modal">
+        <div class="modal-content">
+            <span class="close" id="closeRecordingModal">&times;</span>
+            <h2>Recording Management</h2>
+            <div style="margin-bottom: 20px;">
+                <div class="input-group">
+                    <label for="recordingNameInput">Recording Name:</label>
+                    <input type="text" id="recordingNameInput" placeholder="Enter recording name">
+                </div>
+                <button class="btn btn-primary" id="saveRecordingBtn">Save Current Recording</button>
+            </div>
+            <div>
+                <h3>Saved Recordings:</h3>
+                <div id="savedRecordingsList" style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 5px;">
+                    <p style="color: #666; text-align: center;">No recordings saved</p>
+                </div>
+            </div>
+            <div style="margin-top: 20px;">
+                <button class="btn btn-danger" id="clearAllRecordingsBtn">Clear All</button>
+                <button class="btn btn-secondary" id="exportAllRecordingsBtn">Export All</button>
+                <button class="btn btn-secondary" id="importRecordingsBtn">Import File</button>
+                <input type="file" id="importRecordingsFile" accept=".json" style="display: none;">
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden file inputs -->
+    <input type="file" id="importSingleFile" accept=".json" style="display: none;">
+
+    <script>
+        function ArmController() {
+            this.config = {
+                armType: 4,
+                joints: [],
+                isConnected: false,
+                websocket: null,
+                isRecording: false,
+                recordedMovements: [],
+                maxRecordings: 100,
+                isPlaying: false,
+                localRecordings: []
+            };
+
+            this.armConfigs = {
+                4: ['Base', 'Shoulder', 'Elbow', 'Gripper'],
+                5: ['Base', 'Shoulder', 'Elbow', 'Wrist Pitch', 'Gripper'],
+                6: ['Base', 'Shoulder', 'Elbow', 'Wrist Pitch', 'Wrist Roll', 'Gripper']
+            };
+
+            this.init();
+        }
+
+        ArmController.prototype.init = function() {
+            this.loadSettings();
+            this.setupEventListeners();
+            this.updateArmConfiguration();
+        };
+
+        ArmController.prototype.setupEventListeners = function() {
+            var self = this;
+
+            document.getElementById('logoUpload').addEventListener('change', function(e) {
+                self.handleLogoUpload(e);
+            });
+
+            document.getElementById('connectBtn').addEventListener('click', function() {
+                self.toggleConnection();
+            });
+
+            var dofBtns = document.querySelectorAll('.dof-btn');
+            for (var i = 0; i < dofBtns.length; i++) {
+                dofBtns[i].addEventListener('click', function() {
+                    self.setArmType(parseInt(this.getAttribute('data-dof')));
+                });
+            }
+
+            document.getElementById('homeBtn').addEventListener('click', function() {
+                self.goHome();
+            });
+
+            document.getElementById('settingsBtn').addEventListener('click', function() {
+                document.getElementById('settingsModal').style.display = 'block';
+            });
+
+            document.getElementById('resetBtn').addEventListener('click', function() {
+                self.reset();
+            });
+
+            document.getElementById('recordBtn').addEventListener('click', function() {
+                self.startRecording();
+            });
+
+            document.getElementById('stopRecordBtn').addEventListener('click', function() {
+                self.stopRecording();
+            });
+
+            document.getElementById('playbackBtn').addEventListener('click', function() {
+                self.playbackRecordings();
+            });
+
+            document.getElementById('clearRecordBtn').addEventListener('click', function() {
+                self.clearRecordings();
+            });
+
+            document.getElementById('exportRecordBtn').addEventListener('click', function() {
+                self.exportCurrentRecording();
+            });
+
+            document.getElementById('importRecordBtn').addEventListener('click', function() {
+                document.getElementById('importSingleFile').click();
+            });
+
+            document.getElementById('manageRecordBtn').addEventListener('click', function() {
+                document.getElementById('recordingModal').style.display = 'block';
+                self.updateRecordingsList();
+            });
+
+            document.getElementById('emergencyStop').addEventListener('click', function() {
+                self.emergencyStop();
+            });
+
+            // Modal event listeners
+            document.getElementById('closeSettings').addEventListener('click', function() {
+                document.getElementById('settingsModal').style.display = 'none';
+            });
+
+            document.getElementById('closeRecordingModal').addEventListener('click', function() {
+                document.getElementById('recordingModal').style.display = 'none';
+            });
+
+            window.addEventListener('click', function(e) {
+                if (e.target === document.getElementById('settingsModal')) {
+                    document.getElementById('settingsModal').style.display = 'none';
+                }
+                if (e.target === document.getElementById('recordingModal')) {
+                    document.getElementById('recordingModal').style.display = 'none';
+                }
+            });
+
+            // File import listeners
+            document.getElementById('importSingleFile').addEventListener('change', function(e) {
+                self.importRecording(e);
+            });
+
+            document.getElementById('importRecordingsFile').addEventListener('change', function(e) {
+                self.importRecordings(e);
+            });
+
+            // Settings and recording event listeners
+            document.getElementById('saveSettingsBtn').addEventListener('click', function() {
+                self.saveSettings();
+            });
+
+            document.getElementById('saveRecordingBtn').addEventListener('click', function() {
+                self.saveLocalRecording();
+            });
+
+            document.getElementById('clearAllRecordingsBtn').addEventListener('click', function() {
+                self.clearAllLocalRecordings();
+            });
+
+            document.getElementById('exportAllRecordingsBtn').addEventListener('click', function() {
+                self.exportAllRecordings();
+            });
+
+            document.getElementById('importRecordingsBtn').addEventListener('click', function() {
+                document.getElementById('importRecordingsFile').click();
+            });
+        };
+
+        ArmController.prototype.handleLogoUpload = function(event) {
+            var file = event.target.files[0];
+            if (!file) return;
+
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var logoImage = document.getElementById('logoImage');
+                var logoText = document.getElementById('logoText');
+                
+                logoImage.src = e.target.result;
+                logoImage.style.display = 'block';
+                logoText.style.display = 'none';
+                
+                // Store in memory only (no localStorage)
+            };
+            reader.readAsDataURL(file);
+        };
+
+        ArmController.prototype.setArmType = function(dof) {
+            this.config.armType = dof;
+            
+            var dofBtns = document.querySelectorAll('.dof-btn');
+            for (var i = 0; i < dofBtns.length; i++) {
+                if (parseInt(dofBtns[i].getAttribute('data-dof')) === dof) {
+                    dofBtns[i].className = 'btn btn-primary dof-btn active';
+                } else {
+                    dofBtns[i].className = 'btn btn-secondary dof-btn';
+                }
+            }
+
+            this.updateArmConfiguration();
+        };
+
+        ArmController.prototype.updateArmConfiguration = function() {
+            var jointNames = this.armConfigs[this.config.armType];
+            this.config.joints = [];
+            
+            for (var i = 0; i < jointNames.length; i++) {
+                this.config.joints.push({
+                    name: jointNames[i],
+                    minAngle: 0,
+                    maxAngle: 180,
+                    currentAngle: 90,
+                    index: i
+                });
+            }
+
+            this.renderJointControls();
+            this.renderArmVisualization();
+        };
+
+        ArmController.prototype.renderJointControls = function() {
+            var container = document.getElementById('jointControls');
+            container.innerHTML = '';
+            var self = this;
+
+            for (var i = 0; i < this.config.joints.length; i++) {
+                var joint = this.config.joints[i];
+                var control = document.createElement('div');
+                control.className = 'joint-control';
+                control.setAttribute('data-joint-index', i);
+                
+                control.innerHTML = 
+                    '<div class="joint-header">' +
+                        '<input type="text" class="joint-name" value="' + joint.name + '">' +
+                        '<input type="number" class="joint-angle-input" min="' + joint.minAngle + '" max="' + joint.maxAngle + '" value="' + joint.currentAngle + '">' +
+                        '<div class="joint-angle">' + joint.currentAngle + '°</div>' +
+                    '</div>' +
+                    '<input type="range" class="slider" min="' + joint.minAngle + '" max="' + joint.maxAngle + '" value="' + joint.currentAngle + '">' +
+                    '<div class="range-labels">' +
+                        '<span>' + joint.minAngle + '°</span>' +
+                        '<span>' + joint.maxAngle + '°</span>' +
+                    '</div>';
+
+                container.appendChild(control);
+
+                var nameInput = control.querySelector('.joint-name');
+                var angleInput = control.querySelector('.joint-angle-input');
+                var slider = control.querySelector('.slider');
+                var angleDisplay = control.querySelector('.joint-angle');
+
+                this.addJointEventListeners(i, nameInput, angleInput, slider, angleDisplay, control);
+            }
+        };
+
+        ArmController.prototype.addJointEventListeners = function(index, nameInput, angleInput, slider, angleDisplay, control) {
+            var self = this;
+
+            nameInput.addEventListener('change', function(e) {
+                self.config.joints[index].name = e.target.value;
+                self.renderArmVisualization();
+            });
+
+            angleInput.addEventListener('change', function(e) {
+                var angle = parseInt(e.target.value);
+                self.updateJoint(index, angle, slider, angleDisplay, control);
+            });
+
+            var isDragging = false;
+
+            slider.addEventListener('mousedown', function() {
+                isDragging = true;
+            });
+
+            slider.addEventListener('input', function(e) {
+                var angle = parseInt(e.target.value);
+                angleInput.value = angle;
+                angleDisplay.textContent = angle + '°';
+                self.config.joints[index].currentAngle = angle;
+                self.renderArmVisualization();
+                control.classList.add('active');
+            });
+
+            slider.addEventListener('mouseup', function() {
+                if (isDragging) {
+                    var angle = parseInt(slider.value);
+                    self.sendJointCommand(index, angle);
+                    control.classList.remove('active');
+                    isDragging = false;
+                }
+            });
+        };
+
+        ArmController.prototype.updateJoint = function(index, angle, slider, display, control) {
+            if (angle >= 0 && angle <= 180) {
+                this.config.joints[index].currentAngle = angle;
+                slider.value = angle;
+                display.textContent = angle + '°';
+                this.renderArmVisualization();
+                this.sendJointCommand(index, angle);
+                control.classList.add('active');
+                setTimeout(function() {
+                    control.classList.remove('active');
+                }, 1000);
+            }
+        };
+
+        ArmController.prototype.renderArmVisualization = function() {
+            var svg = document.getElementById('armDiagram');
+            svg.innerHTML = '';
+
+            this.updateArmStatusIndicators();
+
+            // Draw base platform
+            var base = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            base.setAttribute('x', '80');
+            base.setAttribute('y', '140');
+            base.setAttribute('width', '20');
+            base.setAttribute('height', '15');
+            base.setAttribute('fill', '#007bff');
+            base.setAttribute('rx', '2');
+            svg.appendChild(base);
+
+            // Starting position and angle
+            var x = 90, y = 140;
+            var segmentLength = 25;
+            
+            // Get base rotation from first joint and start vertical
+            var baseJoint = this.config.joints[0];
+            var baseRotationAngle = (baseJoint.currentAngle - 90) * Math.PI / 180;
+            var currentAngle = -Math.PI / 2 + baseRotationAngle;
+
+            // Draw base rotation indicator
+            var baseIndicator = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            baseIndicator.setAttribute('cx', '90');
+            baseIndicator.setAttribute('cy', '140');
+            baseIndicator.setAttribute('r', '6');
+            baseIndicator.setAttribute('fill', baseJoint.currentAngle === 90 ? '#28a745' : '#ffc107');
+            baseIndicator.setAttribute('stroke', '#333');
+            baseIndicator.setAttribute('stroke-width', '1');
+            svg.appendChild(baseIndicator);
+
+            // Add base label
+            var baseLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            baseLabel.setAttribute('x', '90');
+            baseLabel.setAttribute('y', '175');
+            baseLabel.setAttribute('font-size', '10');
+            baseLabel.setAttribute('font-weight', 'bold');
+            baseLabel.setAttribute('fill', '#333');
+            baseLabel.setAttribute('text-anchor', 'middle');
+            baseLabel.textContent = baseJoint.name;
+            svg.appendChild(baseLabel);
+
+            // Draw arm segments for joints 1 and beyond
+            for (var i = 1; i < this.config.joints.length; i++) {
+                var joint = this.config.joints[i];
+                
+                // Apply joint rotation
+                var jointRotation = (joint.currentAngle - 90) * Math.PI / 180;
+                currentAngle += jointRotation;
+                
+                // Calculate new position
+                var newX = x + Math.cos(currentAngle) * segmentLength;
+                var newY = y + Math.sin(currentAngle) * segmentLength;
+
+                // Draw arm segment
+                var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', x);
+                line.setAttribute('y1', y);
+                line.setAttribute('x2', newX);
+                line.setAttribute('y2', newY);
+                line.setAttribute('stroke', '#007bff');
+                line.setAttribute('stroke-width', '4');
+                line.setAttribute('stroke-linecap', 'round');
+                svg.appendChild(line);
+
+                // Draw joint circle
+                var circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', x);
+                circle.setAttribute('cy', y);
+                circle.setAttribute('r', '4');
+                circle.setAttribute('fill', joint.currentAngle === 90 ? '#28a745' : '#0056b3');
+                svg.appendChild(circle);
+
+                // Position label relative to joint position with offset to avoid overlap
+                var labelOffsetX = 10;
+                var labelOffsetY = -20;
+                
+                // Adjust label position based on arm orientation to avoid overlaps
+                if (newX < x) labelOffsetX = -15;
+                if (newY > y + 10) labelOffsetY = 15;
+                
+                var label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                label.setAttribute('x', x + labelOffsetX);
+                label.setAttribute('y', y + labelOffsetY);
+                label.setAttribute('font-size', '9');
+                label.setAttribute('font-weight', 'bold');
+                label.setAttribute('fill', '#333');
+                label.setAttribute('text-anchor', labelOffsetX < 0 ? 'end' : 'start');
+                label.textContent = joint.name;
+                svg.appendChild(label);
+
+                // Update position for next segment
+                x = newX;
+                y = newY;
+            }
+
+            // Draw end effector
+            if (this.config.armType >= 5 && this.config.joints.length > 4) {
+                var gripperJoint = this.config.joints[this.config.joints.length - 1];
+                
+                if (gripperJoint.name.toLowerCase().includes('gripper')) {
+                    // Draw gripper
+                    var gripperAngle = gripperJoint.currentAngle;
+                    var openAmount = Math.abs(gripperAngle - 90) / 90 * 4;
+                    
+                    // Calculate gripper orientation perpendicular to last segment
+                    var gripperAngle1 = currentAngle + Math.PI / 2;
+                    var gripperAngle2 = currentAngle - Math.PI / 2;
+                    
+                    var gripper1X1 = x + Math.cos(gripperAngle1) * 2;
+                    var gripper1Y1 = y + Math.sin(gripperAngle1) * 2;
+                    var gripper1X2 = gripper1X1 + Math.cos(gripperAngle1) * (6 + openAmount);
+                    var gripper1Y2 = gripper1Y1 + Math.sin(gripperAngle1) * (6 + openAmount);
+                    
+                    var gripper2X1 = x + Math.cos(gripperAngle2) * 2;
+                    var gripper2Y1 = y + Math.sin(gripperAngle2) * 2;
+                    var gripper2X2 = gripper2X1 + Math.cos(gripperAngle2) * (6 + openAmount);
+                    var gripper2Y2 = gripper2Y1 + Math.sin(gripperAngle2) * (6 + openAmount);
+                    
+                    var gripper1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    gripper1.setAttribute('x1', gripper1X1);
+                    gripper1.setAttribute('y1', gripper1Y1);
+                    gripper1.setAttribute('x2', gripper1X2);
+                    gripper1.setAttribute('y2', gripper1Y2);
+                    gripper1.setAttribute('stroke', '#28a745');
+                    gripper1.setAttribute('stroke-width', '3');
+                    gripper1.setAttribute('stroke-linecap', 'round');
+                    svg.appendChild(gripper1);
+
+                    var gripper2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    gripper2.setAttribute('x1', gripper2X1);
+                    gripper2.setAttribute('y1', gripper2Y1);
+                    gripper2.setAttribute('x2', gripper2X2);
+                    gripper2.setAttribute('y2', gripper2Y2);
+                    gripper2.setAttribute('stroke', '#28a745');
+                    gripper2.setAttribute('stroke-width', '3');
+                    gripper2.setAttribute('stroke-linecap', 'round');
+                    svg.appendChild(gripper2);
+                } else {
+                    // Draw simple end effector
+                    var end = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    end.setAttribute('cx', x);
+                    end.setAttribute('cy', y);
+                    end.setAttribute('r', '3');
+                    end.setAttribute('fill', '#28a745');
+                    svg.appendChild(end);
+                }
+            } else {
+                // Draw simple end point
+                var end = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                end.setAttribute('cx', x);
+                end.setAttribute('cy', y);
+                end.setAttribute('r', '3');
+                end.setAttribute('fill', '#28a745');
+                svg.appendChild(end);
+            }
+
+            // Check if all joints are at home position
+            var allHome = true;
+            for (var i = 0; i < this.config.joints.length; i++) {
+                if (this.config.joints[i].currentAngle !== 90) {
+                    allHome = false;
+                    break;
+                }
+            }
+
+            if (allHome) {
+                var homeLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                homeLabel.setAttribute('x', '90');
+                homeLabel.setAttribute('y', '10');
+                homeLabel.setAttribute('font-size', '12');
+                homeLabel.setAttribute('font-weight', 'bold');
+                homeLabel.setAttribute('fill', '#28a745');
+                homeLabel.setAttribute('text-anchor', 'middle');
+                homeLabel.textContent = 'HOME POSITION';
+                svg.appendChild(homeLabel);
+            }
+        };
+
+        ArmController.prototype.updateArmStatusIndicators = function() {
+            var container = document.getElementById('armStatusIndicators');
+            container.innerHTML = '';
+
+            for (var i = 0; i < this.config.joints.length; i++) {
+                var joint = this.config.joints[i];
+                var indicator = document.createElement('div');
+                indicator.style.cssText = 'margin-bottom: 2px; font-weight: bold;';
+                indicator.style.color = joint.currentAngle === 90 ? '#28a745' : '#007bff';
+                indicator.textContent = joint.name + ': ' + joint.currentAngle + '°';
+                container.appendChild(indicator);
+            }
+        };
+
+        ArmController.prototype.toggleConnection = function() {
+            if (this.config.isConnected) {
+                this.disconnect();
+            } else {
+                this.connect();
+            }
+        };
+
+        ArmController.prototype.connect = function() {
+            var ip = document.getElementById('ipAddress').value;
+            if (!ip) {
+                alert('Please enter IP address');
+                return;
+            }
+
+            var self = this;
+            try {
+                this.updateConnectionStatus('connecting', 'Connecting...');
+                this.config.websocket = new WebSocket('ws://' + ip + ':81');
+
+                this.config.websocket.onopen = function() {
+                    self.config.isConnected = true;
+                    self.updateConnectionStatus('connected', 'Connected');
+                    document.getElementById('connectBtn').textContent = 'Disconnect';
+                    document.getElementById('connectBtn').className = 'btn btn-danger';
+                    
+                    // Send initial handshake with simplified JSON
+                    self.sendWebSocketCommand({t: 'init', d: self.config.armType});
+                };
+
+                this.config.websocket.onmessage = function(event) {
+                    self.handleWebSocketMessage(event);
+                };
+
+                this.config.websocket.onclose = function() {
+                    self.disconnect();
+                };
+
+                this.config.websocket.onerror = function() {
+                    self.disconnect();
+                    alert('WebSocket connection failed');
+                };
+
+            } catch (error) {
+                alert('Connection failed: ' + error.message);
+                this.disconnect();
+            }
+        };
+
+        ArmController.prototype.disconnect = function() {
+            if (this.config.websocket) {
+                this.config.websocket.close();
+                this.config.websocket = null;
+            }
+            this.config.isConnected = false;
+            this.updateConnectionStatus('disconnected', 'Disconnected');
+            document.getElementById('connectBtn').textContent = 'Connect WebSocket';
+            document.getElementById('connectBtn').className = 'btn btn-success';
+        };
+
+        ArmController.prototype.updateConnectionStatus = function(status, text) {
+            var statusEl = document.getElementById('connectionStatus');
+            var textEl = document.getElementById('statusText');
+            statusEl.className = 'connection-status status-' + status;
+            textEl.textContent = text;
+        };
+
+        ArmController.prototype.sendWebSocketCommand = function(command) {
+            if (this.config.websocket && this.config.websocket.readyState === WebSocket.OPEN) {
+                this.config.websocket.send(JSON.stringify(command));
+            }
+        };
+
+        ArmController.prototype.handleWebSocketMessage = function(event) {
+            try {
+                var message = JSON.parse(event.data);
+                
+                // Handle different message types
+                if (message.t === 'ack') {
+                    console.log('Command acknowledged');
+                } else if (message.t === 'status') {
+                    // Handle status updates from device
+                    console.log('Device status:', message.d);
+                } else if (message.t === 'error') {
+                    console.error('Device error:', message.m);
+                    alert('Device error: ' + message.m);
+                }
+            } catch (error) {
+                console.error('Failed to parse WebSocket message:', error);
+            }
+        };
+
+        ArmController.prototype.sendJointCommand = function(jointIndex, angle) {
+            if (!this.config.isConnected) return;
+
+            if (this.config.isRecording && !this.config.isPlaying) {
+                this.recordMovement(jointIndex, angle);
+            }
+
+            // Simplified JSON for reduced data transmission
+            var command = {
+                t: 'move',  // type
+                j: jointIndex,  // joint
+                a: angle,  // angle
+                d: this.config.armType  // dof
+            };
+
+            this.sendWebSocketCommand(command);
+        };
+
+        ArmController.prototype.goHome = function() {
+            for (var i = 0; i < this.config.joints.length; i++) {
+                this.config.joints[i].currentAngle = 90;
+                this.sendJointCommand(i, 90);
+            }
+            this.renderJointControls();
+            this.renderArmVisualization();
+        };
+
+        ArmController.prototype.reset = function() {
+            if (confirm('Reset all settings?')) {
+                location.reload();
+            }
+        };
+
+        ArmController.prototype.emergencyStop = function() {
+            if (this.config.isConnected) {
+                this.sendWebSocketCommand({t: 'stop'});
+            }
+        };
+
+        ArmController.prototype.startRecording = function() {
+            this.config.isRecording = true;
+            this.config.recordedMovements = [];
+            
+            document.getElementById('recordBtn').style.display = 'none';
+            document.getElementById('stopRecordBtn').style.display = 'inline-block';
+            document.getElementById('recordingStatus').textContent = 'Recording... (0/' + this.config.maxRecordings + ')';
+            document.getElementById('recordingStatus').style.color = '#dc3545';
+        };
+
+        ArmController.prototype.stopRecording = function() {
+            this.config.isRecording = false;
+            
+            document.getElementById('recordBtn').style.display = 'inline-block';
+            document.getElementById('stopRecordBtn').style.display = 'none';
+            document.getElementById('recordingStatus').textContent = 'Recording stopped. Movements: ' + this.config.recordedMovements.length;
+            document.getElementById('recordingStatus').style.color = '#28a745';
+        };
+
+        ArmController.prototype.recordMovement = function(jointIndex, angle) {
+            if (this.config.recordedMovements.length >= this.config.maxRecordings) {
+                this.stopRecording();
+                alert('Maximum recordings reached');
+                return;
+            }
+
+            // Simplified movement object
+            var movement = {
+                j: jointIndex,  // joint
+                a: angle,      // angle
+                d: 500         // delay
+            };
+
+            this.config.recordedMovements.push(movement);
+            document.getElementById('recordingStatus').textContent = 'Recording... (' + this.config.recordedMovements.length + '/' + this.config.maxRecordings + ')';
+        };
+
+        ArmController.prototype.playbackRecordings = function() {
+            if (this.config.recordedMovements.length === 0) {
+                alert('No recorded movements');
+                return;
+            }
+
+            if (this.config.isPlaying) {
+                alert('Playback in progress');
+                return;
+            }
+
+            this.config.isPlaying = true;
+            document.getElementById('playbackBtn').textContent = 'Playing...';
+            document.getElementById('playbackBtn').disabled = true;
+            document.getElementById('recordingStatus').textContent = 'Playing back movements...';
+            document.getElementById('recordingStatus').style.color = '#007bff';
+
+            this.playbackVisualization();
+        };
+
+        ArmController.prototype.playbackVisualization = function() {
+            var self = this;
+            var movementIndex = 0;
+            var movements = this.config.recordedMovements;
+
+            function executeNextMovement() {
+                if (movementIndex >= movements.length) {
+                    // Playback completed
+                    self.config.isPlaying = false;
+                    document.getElementById('playbackBtn').textContent = 'Playback';
+                    document.getElementById('playbackBtn').disabled = false;
+                    document.getElementById('recordingStatus').textContent = 'Playback completed';
+                    document.getElementById('recordingStatus').style.color = '#28a745';
+                    return;
+                }
+
+                var movement = movements[movementIndex];
+                
+                // Send command to device and update local visualization
+                self.sendJointCommand(movement.j, movement.a);
+                
+                // Update local joint angle and visualization
+                if (movement.j >= 0 && movement.j < self.config.joints.length) {
+                    self.config.joints[movement.j].currentAngle = movement.a;
+                    self.renderArmVisualization();
+                    
+                    // Update the specific joint control UI
+                    var jointControls = document.querySelectorAll('#jointControls .joint-control');
+                    if (jointControls[movement.j]) {
+                        var control = jointControls[movement.j];
+                        var angleInput = control.querySelector('.joint-angle-input');
+                        var slider = control.querySelector('.slider');
+                        var angleDisplay = control.querySelector('.joint-angle');
+                        
+                        angleInput.value = movement.a;
+                        slider.value = movement.a;
+                        angleDisplay.textContent = movement.a + '°';
+                        
+                        // Add visual feedback for active joint
+                        control.classList.add('active');
+                        setTimeout(function() {
+                            control.classList.remove('active');
+                        }, movement.d || 500);
+                    }
+                }
+
+                // Update status
+                document.getElementById('recordingStatus').textContent = 
+                    'Playing movement ' + (movementIndex + 1) + '/' + movements.length;
+
+                movementIndex++;
+                
+                // Schedule next movement
+                setTimeout(executeNextMovement, movement.d || 500);
+            }
+
+            // Start playback
+            executeNextMovement();
+        };
+
+        ArmController.prototype.clearRecordings = function() {
+            if (this.config.isRecording) {
+                alert('Stop recording first');
+                return;
+            }
+
+            if (confirm('Clear current recording?')) {
+                this.config.recordedMovements = [];
+                document.getElementById('recordingStatus').textContent = 'Recording cleared';
+                document.getElementById('recordingStatus').style.color = '#6c757d';
+            }
+        };
+
+        ArmController.prototype.exportCurrentRecording = function() {
+            if (this.config.recordedMovements.length === 0) {
+                alert('No recording to export');
+                return;
+            }
+
+            var recording = {
+                name: 'Recording_' + new Date().toISOString().slice(0, 19).replace(/:/g, '-'),
+                movements: this.config.recordedMovements,
+                armType: this.config.armType,
+                timestamp: Date.now(),
+                version: '1.0'
+            };
+
+            this.downloadJSON(recording, recording.name + '.json');
+        };
+
+        ArmController.prototype.importRecording = function(event) {
+            var file = event.target.files[0];
+            if (!file) return;
+
+            var self = this;
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    var recording = JSON.parse(e.target.result);
+                    
+                    if (!recording.movements || !Array.isArray(recording.movements)) {
+                        throw new Error('Invalid recording format');
+                    }
+
+                    self.config.recordedMovements = recording.movements;
+                    document.getElementById('recordingStatus').textContent = 
+                        'Imported: ' + (recording.name || 'Unknown') + ' (' + recording.movements.length + ' movements)';
+                    document.getElementById('recordingStatus').style.color = '#007bff';
+                    
+                    alert('Recording imported successfully!');
+                } catch (error) {
+                    alert('Failed to import recording: ' + error.message);
+                }
+            };
+            reader.readAsText(file);
+        };
+
+        ArmController.prototype.downloadJSON = function(data, filename) {
+            var blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        };
+
+        ArmController.prototype.saveSettings = function() {
+            var settings = {
+                armType: this.config.armType,
+                joints: this.config.joints,
+                localRecordings: this.config.localRecordings
+            };
+            
+            // Store in memory only
+            document.getElementById('settingsModal').style.display = 'none';
+            alert('Settings saved to session!');
+        };
+
+        ArmController.prototype.loadSettings = function() {
+            // Load default settings only
+            this.setArmType(4);
+        };
+
+        ArmController.prototype.saveLocalRecording = function() {
+            if (this.config.recordedMovements.length === 0) {
+                alert('No recording to save');
+                return;
+            }
+
+            var name = document.getElementById('recordingNameInput').value.trim();
+            if (!name) {
+                alert('Please enter a recording name');
+                return;
+            }
+
+            var recording = {
+                name: name,
+                movements: this.config.recordedMovements.slice(),
+                armType: this.config.armType,
+                timestamp: Date.now(),
+                duration: this.config.recordedMovements.length * 0.5
+            };
+
+            this.config.localRecordings.push(recording);
+            
+            document.getElementById('recordingNameInput').value = '';
+            this.updateRecordingsList();
+            
+            alert('Recording saved locally!');
+        };
+
+        ArmController.prototype.updateRecordingsList = function() {
+            var container = document.getElementById('savedRecordingsList');
+            
+            if (this.config.localRecordings.length === 0) {
+                container.innerHTML = '<p style="color: #666; text-align: center;">No recordings saved</p>';
+                return;
+            }
+
+            container.innerHTML = '';
+            
+            for (var i = 0; i < this.config.localRecordings.length; i++) {
+                var recording = this.config.localRecordings[i];
+                var item = document.createElement('div');
+                item.style.cssText = 'border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; border-radius: 5px; background: #f9f9f9;';
+                
+                var date = new Date(recording.timestamp).toLocaleString();
+                
+                item.innerHTML = '<div style="font-weight: bold; margin-bottom: 5px;">' + recording.name + '</div>' +
+                    '<div style="font-size: 12px; color: #666; margin-bottom: 5px;">' + 
+                    recording.movements.length + ' movements • ' + recording.armType + ' DOF • ' + recording.duration + 's</div>' +
+                    '<div style="font-size: 11px; color: #999; margin-bottom: 8px;">Saved: ' + date + '</div>' +
+                    '<div>' +
+                    '<button class="btn btn-primary" style="padding: 4px 8px; font-size: 11px; margin-right: 5px;" onclick="armController.loadLocalRecording(' + i + ')">Load</button>' +
+                    '<button class="btn btn-success" style="padding: 4px 8px; font-size: 11px; margin-right: 5px;" onclick="armController.playLocalRecording(' + i + ')">Play</button>' +
+                    '<button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px; margin-right: 5px;" onclick="armController.exportLocalRecording(' + i + ')">Export</button>' +
+                    '<button class="btn btn-danger" style="padding: 4px 8px; font-size: 11px;" onclick="armController.deleteLocalRecording(' + i + ')">Delete</button>' +
+                    '</div>';
+                
+                container.appendChild(item);
+            }
+        };
+
+        ArmController.prototype.loadLocalRecording = function(index) {
+            if (index < 0 || index >= this.config.localRecordings.length) return;
+            
+            var recording = this.config.localRecordings[index];
+            this.config.recordedMovements = recording.movements.slice();
+            
+            document.getElementById('recordingStatus').textContent = 'Loaded: ' + recording.name + ' (' + recording.movements.length + ' movements)';
+            document.getElementById('recordingStatus').style.color = '#007bff';
+            document.getElementById('recordingModal').style.display = 'none';
+            
+            alert('Loaded recording: ' + recording.name);
+        };
+
+        ArmController.prototype.playLocalRecording = function(index) {
+            if (index < 0 || index >= this.config.localRecordings.length) return;
+            
+            var recording = this.config.localRecordings[index];
+            this.config.recordedMovements = recording.movements.slice();
+            
+            document.getElementById('recordingModal').style.display = 'none';
+            this.playbackRecordings();
+        };
+
+        ArmController.prototype.exportLocalRecording = function(index) {
+            if (index < 0 || index >= this.config.localRecordings.length) return;
+            
+            var recording = this.config.localRecordings[index];
+            this.downloadJSON(recording, recording.name + '.json');
+        };
+
+        ArmController.prototype.deleteLocalRecording = function(index) {
+            if (index < 0 || index >= this.config.localRecordings.length) return;
+            
+            var recording = this.config.localRecordings[index];
+            if (confirm('Delete recording "' + recording.name + '"?')) {
+                this.config.localRecordings.splice(index, 1);
+                this.updateRecordingsList();
+            }
+        };
+
+        ArmController.prototype.clearAllLocalRecordings = function() {
+            if (this.config.localRecordings.length === 0) {
+                alert('No recordings to clear');
+                return;
+            }
+            
+            if (confirm('Delete all ' + this.config.localRecordings.length + ' recordings?')) {
+                this.config.localRecordings = [];
+                this.updateRecordingsList();
+                alert('All recordings cleared');
+            }
+        };
+
+        ArmController.prototype.exportAllRecordings = function() {
+            if (this.config.localRecordings.length === 0) {
+                alert('No recordings to export');
+                return;
+            }
+
+            var exportData = {
+                recordings: this.config.localRecordings,
+                exportDate: new Date().toISOString(),
+                version: '1.0'
+            };
+
+            this.downloadJSON(exportData, 'RoboticArm_Recordings_' + new Date().toISOString().slice(0, 10) + '.json');
+        };
+
+        ArmController.prototype.importRecordings = function(event) {
+            var file = event.target.files[0];
+            if (!file) return;
+
+            var self = this;
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    var importData = JSON.parse(e.target.result);
+                    
+                    if (importData.recordings && Array.isArray(importData.recordings)) {
+                        // Import multiple recordings
+                        var imported = 0;
+                        for (var i = 0; i < importData.recordings.length; i++) {
+                            var recording = importData.recordings[i];
+                            if (recording.movements && Array.isArray(recording.movements)) {
+                                self.config.localRecordings.push(recording);
+                                imported++;
+                            }
+                        }
+                        self.updateRecordingsList();
+                        alert('Imported ' + imported + ' recordings successfully!');
+                    } else if (importData.movements && Array.isArray(importData.movements)) {
+                        // Import single recording
+                        self.config.localRecordings.push(importData);
+                        self.updateRecordingsList();
+                        alert('Recording imported successfully!');
+                    } else {
+                        throw new Error('Invalid file format');
+                    }
+                } catch (error) {
+                    alert('Failed to import recordings: ' + error.message);
+                }
+            };
+            reader.readAsText(file);
+        };
+
+        var armController;
+        window.addEventListener('DOMContentLoaded', function() {
+            armController = new ArmController();
+        });
+    </script>
+</body>
+</html>
+                

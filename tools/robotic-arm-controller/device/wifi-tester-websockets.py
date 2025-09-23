@@ -1,13 +1,15 @@
-# Ultra-lightweight MicroPython Robotic Arm Controller
-# Extreme memory optimization for ESP8266/ESP32
+# Ultra-minimal MicroPython Robotic Arm Controller
+# Maximum memory optimization for ESP8266
+# Conditional PCA9685 support
 
-import asyncio
-import json
 import gc
 from machine import Pin, PWM
 import network
 
-# Platform detection
+# Force early garbage collection
+gc.collect()
+
+# Platform detection (minimal)
 try:
     from machine import unique_id
     IS_ESP32 = len(unique_id()) == 6
@@ -15,41 +17,96 @@ except:
     IS_ESP32 = False
 
 # Configurations
-WIFI_SSID = "Infinity-3rd-2.4"
-WIFI_PASSWORD = "9880736444"
+WIFI_SSID = "SSID"
+WIFI_PASSWORD = "PASSWD"
 
-if IS_ESP32:
-    SERVO_PINS = [2, 4, 5, 18]        
-else:   
-    SERVO_PINS = [14, 12, 13, 15]
+# Servo controller configuration
+USE_PCA9685 = False  # Set to True to enable PCA9685 support
 
-LED_PIN = None
-# Minimal servo class
-class Servo:
-    __slots__ = ['p', 'a']
-    
-    def __init__(self, pin):
-        self.p = PWM(Pin(pin))
-        self.p.freq(50)
-        self.a = 90
-        self.move(90)
-    
-    def move(self, angle):
-        self.a = max(0, min(180, angle))
-        d = int((500 + self.a * 11.11) * 1024 / 20000)
-        self.p.duty(d)
+# Conditional imports - ONLY import what we need
+if USE_PCA9685:
+    from machine import I2C
+    # PCA9685 configuration
+    PCA9685_ADDRESS = 0x40
+    PCA9685_FREQUENCY = 50
+    if IS_ESP32:
+        I2C_SCL, I2C_SDA = 22, 21
+    else:
+        I2C_SCL, I2C_SDA = 5, 4
+    PCA9685_CHANNELS = [0, 1, 2, 3]
+else:
+    # Direct PWM configuration
+    if IS_ESP32:
+        SERVO_PINS = [2, 4, 5, 18]
+    else:   
+        SERVO_PINS = [14, 12, 13, 15]
+
+# Force cleanup after imports
+gc.collect()
+
+# Conditional PCA9685 class (only if needed)
+if USE_PCA9685:
+    class PCA9685:
+        def __init__(self, i2c, addr=0x40, freq=50):
+            self.i2c = i2c
+            self.addr = addr
+            try:
+                self.i2c.writeto_mem(addr, 0x00, b'\x00')  # Reset
+                prescale = int(25000000.0 / (4096 * freq) - 1)
+                old_mode = self.i2c.readfrom_mem(addr, 0x00, 1)[0]
+                self.i2c.writeto_mem(addr, 0x00, bytes([(old_mode & 0x7F) | 0x10]))
+                self.i2c.writeto_mem(addr, 0xFE, bytes([prescale]))
+                self.i2c.writeto_mem(addr, 0x00, bytes([old_mode]))
+                import time
+                time.sleep_ms(5)
+                self.i2c.writeto_mem(addr, 0x00, bytes([old_mode | 0xa1]))
+                print(f"PCA ok")
+            except Exception as e:
+                print(f"PCA err: {e}")
+        
+        def set_pwm(self, ch, on, off):
+            try:
+                reg = 0x06 + 4 * ch
+                data = bytes([on & 0xFF, on >> 8, off & 0xFF, off >> 8])
+                self.i2c.writeto_mem(self.addr, reg, data)
+            except:
+                pass
+
+# Minimal servo classes (different for each mode)
+if USE_PCA9685:
+    class Servo:
+        def __init__(self, ch, pca):
+            self.pca = pca
+            self.ch = ch
+            self.a = 90
+            self.move(90)
+        
+        def move(self, angle):
+            self.a = max(0, min(180, angle))
+            pulse_us = 500 + (2500 - 500) * self.a / 180
+            pulse_counts = int(pulse_us / (20000 / 4096))
+            self.pca.set_pwm(self.ch, 0, pulse_counts)
+else:
+    class Servo:
+        def __init__(self, pin):
+            self.p = PWM(Pin(pin))
+            self.p.freq(50)
+            self.a = 90
+            self.move(90)
+        
+        def move(self, angle):
+            self.a = max(0, min(180, angle))
+            d = int((500 + self.a * 11.11) * 1024 / 20000)
+            self.p.duty(d)
 
 # Ultra-minimal WebSocket client
 class WSClient:
-    __slots__ = ['s', 'connected']
-    
-    def __init__(self, socket):
-        self.s = socket
+    def __init__(self, s):
+        self.s = s
         self.connected = True
 
     def read_frame(self):
         try:
-            # Read header (2 bytes minimum)
             data = self.s.recv(2)
             if len(data) < 2:
                 return None, None
@@ -59,46 +116,37 @@ class WSClient:
             masked = (b2 >> 7) & 1
             payload_len = b2 & 0x7f
             
-            # Handle extended length
             if payload_len == 126:
                 data = self.s.recv(2)
                 if len(data) < 2:
                     return None, None
                 payload_len = (data[0] << 8) | data[1]
             elif payload_len == 127:
-                # Skip 64-bit length - too big for microcontroller
                 return None, None
             
-            # Read mask if present
             if masked:
                 mask = self.s.recv(4)
                 if len(mask) < 4:
                     return None, None
             
-            # Read payload
             payload = b''
             if payload_len > 0:
-                if payload_len > 1024:  # Limit payload size
+                if payload_len > 512:  # Reduced limit
                     return None, None
-                    
                 payload = self.s.recv(payload_len)
                 if len(payload) < payload_len:
                     return None, None
-                
-                # Unmask payload if needed
                 if masked:
                     payload = bytes(payload[i] ^ mask[i % 4] for i in range(len(payload)))
             
             return opcode, payload
             
         except OSError as e:
-            # Handle EAGAIN (11) as no data available
             if e.args[0] == 11:  # EAGAIN
                 return None, None
-            # Other errors mean connection issue
             self.connected = False
             return None, None
-        except Exception:
+        except:
             self.connected = False
             return None, None
 
@@ -106,10 +154,8 @@ class WSClient:
         if not self.connected:
             return False
         try:
-            # Build frame
             data = text.encode('utf-8')
-            frame = bytearray()
-            frame.append(0x81)  # FIN + text frame
+            frame = bytearray([0x81])  # FIN + text frame
             
             if len(data) < 126:
                 frame.append(len(data))
@@ -136,27 +182,48 @@ class WSClient:
         except:
             pass
 
-# Main controller - minimal version
+# Minimal controller
 class ArmCtrl:
     def __init__(self):
         self.ssid = WIFI_SSID
         self.pwd = WIFI_PASSWORD
         
-        # Hardware
-        pins = SERVO_PINS
-        self.servos = [Servo(pin) for pin in pins]
+        # Initialize hardware
+        if USE_PCA9685:
+            self.pca = self.init_pca()
+        else:
+            self.pca = None
+        
+        self.init_servos()
+        
         self.q = []
         self.stop = False
         self.clients = []
         
-        # LED
-        try:
-            self.led = Pin(LED_PIN)
-        except:
-            self.led = None
-        
-        # Force cleanup
         gc.collect()
+        print(f"Mem: {gc.mem_free()}")
+    
+    if USE_PCA9685:
+        def init_pca(self):
+            try:
+                i2c = I2C(0, scl=Pin(I2C_SCL), sda=Pin(I2C_SDA), freq=100000)
+                devices = i2c.scan()
+                if PCA9685_ADDRESS not in devices:
+                    print("PCA not found")
+                    return None
+                return PCA9685(i2c, PCA9685_ADDRESS, PCA9685_FREQUENCY)
+            except Exception as e:
+                print(f"I2C err: {e}")
+                return None
+    
+    def init_servos(self):
+        self.servos = []
+        if USE_PCA9685 and self.pca:
+            for ch in PCA9685_CHANNELS:
+                self.servos.append(Servo(ch, self.pca))
+        else:
+            for pin in SERVO_PINS:
+                self.servos.append(Servo(pin))
     
     def wifi_connect(self):
         sta = network.WLAN(network.STA_IF)
@@ -169,7 +236,7 @@ class ArmCtrl:
         print("Connecting...")
         sta.connect(self.ssid, self.pwd)
         
-        for _ in range(20):
+        for _ in range(15):  # Reduced timeout
             if sta.isconnected():
                 print(f"IP: {sta.ifconfig()[0]}")
                 return True
@@ -178,40 +245,31 @@ class ArmCtrl:
         
         return False
 
-    def ws_handshake(self, client_socket):
+    def ws_handshake(self, sock):
         try:
-            # Keep socket blocking for handshake
-            client_socket.setblocking(True)
-            
-            # Read HTTP request in one go
-            request = client_socket.recv(1024)
+            sock.setblocking(True)
+            request = sock.recv(1024)
             if not request:
                 return False
             
-            # Parse request
-            request_str = request.decode('utf-8')
-            lines = request_str.split('\n')
-            
             # Find WebSocket key
             key = None
-            for line in lines:
+            for line in request.decode().split('\n'):
                 if 'sec-websocket-key' in line.lower():
                     key = line.split(':', 1)[1].strip()
                     break
             
             if not key:
-                print("No WebSocket key found")
                 return False
             
             # Generate response key
             import hashlib
             import binascii
             magic = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-            combined = key + magic
-            sha1 = hashlib.sha1(combined.encode()).digest()
+            sha1 = hashlib.sha1((key + magic).encode()).digest()
             accept_key = binascii.b2a_base64(sha1).decode().strip()
             
-            # Send handshake response
+            # Send response
             response = (
                 "HTTP/1.1 101 Switching Protocols\r\n"
                 "Upgrade: websocket\r\n"
@@ -219,19 +277,17 @@ class ArmCtrl:
                 f"Sec-WebSocket-Accept: {accept_key}\r\n\r\n"
             )
             
-            client_socket.send(response.encode())
-            
-            # Switch to non-blocking
-            client_socket.setblocking(False)
-            
+            sock.send(response.encode())
+            sock.setblocking(False)
             return True
             
         except Exception as e:
-            print(f"Handshake error: {e}")
+            print(f"HS err: {e}")
             return False
 
-    def handle_message(self, client, payload):
+    def handle_msg(self, client, payload):
         try:
+            import json
             data = json.loads(payload.decode())
             cmd = data.get('t', '')
             
@@ -240,41 +296,32 @@ class ArmCtrl:
                 a = data.get('a', 90)
                 if 0 <= j < len(self.servos) and 0 <= a <= 180:
                     self.q.append((j, a))
-                    resp = '{"t":"ack","d":"ok"}'
+                    client.send_text('{"t":"ack"}')
                 else:
-                    resp = '{"t":"error","m":"invalid"}'
-                client.send_text(resp)
-                
+                    client.send_text('{"t":"err"}')
+                    
             elif cmd == 'stop':
                 self.stop = True
                 self.q = []
-                client.send_text('{"t":"ack","d":"stopped"}')
+                client.send_text('{"t":"ack"}')
                 
             elif cmd == 'home':
                 for i in range(len(self.servos)):
                     self.q.append((i, 90))
-                client.send_text('{"t":"ack","d":"homing"}')
+                client.send_text('{"t":"ack"}')
                 
             elif cmd == 'status':
                 angles = [s.a for s in self.servos]
-                status = {
-                    't': 'status',
-                    'd': {
-                        'angles': angles,
-                        'mem': gc.mem_free(),
-                        'stop': self.stop
-                    }
-                }
-                client.send_text(json.dumps(status))
+                status = f'{{"t":"status","d":{{"angles":{angles},"mem":{gc.mem_free()}}}}}'
+                client.send_text(status)
                 
         except Exception as e:
-            print(f"Msg error: {e}")
+            print(f"Msg err: {e}")
 
     def servo_loop(self):
-        """Non-async servo control"""
         if self.stop:
             import time
-            time.sleep(2)
+            time.sleep(1)  # Reduced delay
             self.stop = False
             return
             
@@ -282,76 +329,58 @@ class ArmCtrl:
             j, a = self.q.pop(0)
             if j < len(self.servos):
                 self.servos[j].move(a)
-                print(f"J{j}={a}")
-                
-                if self.led:
-                    self.led.on()
-                    import time
-                    time.sleep(0.01)
-                    self.led.off()
+                print(f"S{j}={a}")
 
     def run(self):
-        print("ARM CTRL Lite v1.0")
-        print(f"Mem: {gc.mem_free()}")
+        print("ARM CTRL Mini")
         
         if not self.wifi_connect():
             print("WiFi failed")
             return
         
-        # Create server socket
-        server_socket = None
         try:
             import socket
-            server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            server_socket.bind(('0.0.0.0', 81))
-            server_socket.listen(2)  # Max 2 clients
-            server_socket.setblocking(False)
-            print("Server ready on port 81")
+            server = socket.socket()
+            server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            server.bind(('0.0.0.0', 81))
+            server.listen(1)  # Only 1 client
+            server.setblocking(False)
+            print("Server ready")
             
         except Exception as e:
-            print(f"Server error: {e}")
+            print(f"Server err: {e}")
             return
         
         print("READY!")
         
-        # Main loop
         while True:
             try:
-                # Handle servo movements
                 self.servo_loop()
                 
-                # Check for new connections (non-blocking)
+                # New connections
                 try:
-                    client_socket, addr = server_socket.accept()
-                    print(f"New connection from: {addr[0]}")
+                    sock, addr = server.accept()
+                    print(f"Client: {addr[0]}")
                     
-                    # Handle handshake in blocking mode, then switch to non-blocking
-                    if self.ws_handshake(client_socket):
-                        client = WSClient(client_socket)
+                    if self.ws_handshake(sock):
+                        client = WSClient(sock)
+                        # Remove old client if exists
+                        if self.clients:
+                            self.clients[0].close()
+                            self.clients = []
                         self.clients.append(client)
-                        print("WebSocket handshake successful")
+                        print("WS ok")
                         
-                        # Send initial status
-                        try:
-                            status = f'{{"t":"status","d":{{"mem":{gc.mem_free()},"ready":true}}}}'
-                            client.send_text(status)
-                        except:
-                            pass
+                        # Send ready status
+                        client.send_text(f'{{"t":"status","d":{{"ready":true,"mem":{gc.mem_free()}}}}}')
                     else:
-                        print("WebSocket handshake failed")
-                        try:
-                            client_socket.close()
-                        except:
-                            pass
+                        sock.close()
                         
                 except OSError as e:
-                    if e.args[0] != 11:  # Not EAGAIN (no connections waiting)
-                        print(f"Accept error: {e}")
-                except Exception as e:
-                    print(f"Connection error: {e}")
+                    if e.args[0] != 11:  # Not EAGAIN
+                        print(f"Accept err: {e}")
                 
-                # Handle existing clients
+                # Handle existing client
                 disconnected = []
                 for client in self.clients:
                     if not client.connected:
@@ -360,47 +389,46 @@ class ArmCtrl:
                         
                     try:
                         opcode, payload = client.read_frame()
-                        if opcode is None:
-                            continue
-                        elif opcode == 8:  # Close
+                        if opcode == 8:  # Close
                             disconnected.append(client)
                         elif opcode == 1 and payload:  # Text
-                            self.handle_message(client, payload)
-                    except OSError:
-                        pass  # No data available
+                            self.handle_msg(client, payload)
                     except:
                         disconnected.append(client)
                 
-                # Clean up disconnected clients
+                # Cleanup
                 for client in disconnected:
                     client.close()
                     if client in self.clients:
                         self.clients.remove(client)
                 
-                # Memory management
-                if gc.mem_free() < 5000:
+                # Aggressive memory management
+                if gc.mem_free() < 3000:
                     gc.collect()
-                    print(f"GC: {gc.mem_free()}")
+                    if gc.mem_free() < 2000:
+                        print(f"Low mem: {gc.mem_free()}")
                 
-                # Small delay
                 import time
-                time.sleep(0.01)
+                time.sleep(0.02)  # Slightly longer delay
                 
             except KeyboardInterrupt:
                 break
             except Exception as e:
-                print(f"Loop error: {e}")
+                print(f"Loop err: {e}")
+                gc.collect()
                 import time
                 time.sleep(0.1)
         
         # Cleanup
-        if server_socket:
-            server_socket.close()
+        server.close()
         for client in self.clients:
             client.close()
 
 # Entry point
 def main():
+    gc.collect()
+    print(f"Start mem: {gc.mem_free()}")
+    
     ctrl = ArmCtrl()
     ctrl.run()
 
@@ -409,6 +437,7 @@ if __name__ == "__main__":
         main()
     except Exception as e:
         print(f"Fatal: {e}")
+        gc.collect()
         import time
         time.sleep(2)
         try:

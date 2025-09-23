@@ -406,7 +406,36 @@
 			gap: 5px;
 			flex-wrap: wrap;
 		}
+		.view-toggle {
+			display: flex;
+			justify-content: center;
+			margin-bottom: 10px;
+			gap: 5px;
+		}
 
+		.view-btn {
+			padding: 5px 12px;
+			border: none;
+			border-radius: 15px;
+			cursor: pointer;
+			font-size: 11px;
+			font-weight: bold;
+			transition: all 0.3s ease;
+		}
+
+		.view-btn.active {
+			background: #007bff;
+			color: white;
+		}
+
+		.view-btn:not(.active) {
+			background: #e9ecef;
+			color: #6c757d;
+		}
+
+		.view-btn:hover:not(.active) {
+			background: #dee2e6;
+		}
         @media (max-width: 768px) {
             .main-content {
                 grid-template-columns: 1fr;
@@ -510,15 +539,21 @@
                 </div>
             </div>
 
-            <div class="right-panel">
-                <div class="compact-section-title">Arm Visualization</div>
-                <div id="armStatusIndicators" style="font-size: 20px; margin-bottom: 10px; max-height: 160px; overflow-y: auto;"></div>
-                
-                <div class="arm-visualization">
-                    <svg id="armDiagram" width="100%" height="100%" viewBox="0 0 180 160" preserveAspectRatio="xMidYMid meet">
-                    </svg>
-                </div>
-            </div>
+			<div class="right-panel">
+				<div class="compact-section-title">Arm Visualization</div>
+				<div id="armStatusIndicators" style="font-size: 20px; margin-bottom: 10px; max-height: 160px; overflow-y: auto;"></div>
+				
+				<!-- ADD THIS VIEW TOGGLE -->
+				<div class="view-toggle">
+					<button class="view-btn active" id="topViewBtn">Top View</button>
+					<button class="view-btn" id="sideViewBtn">Side View</button>
+				</div>
+				
+				<div class="arm-visualization">
+					<svg id="armDiagram" width="100%" height="100%" viewBox="0 0 180 160" preserveAspectRatio="xMidYMid meet">
+					</svg>
+				</div>
+</div>
         </div>
     </div>
 
@@ -597,6 +632,8 @@
             this.loadSettings();
             this.setupEventListeners();
             this.updateArmConfiguration();
+			this.setupViewToggle();
+			this.currentView = 'top'; // Add this line
         };
 
         ArmController.prototype.setupEventListeners = function() {
@@ -848,189 +885,336 @@
             }
         };
 
-        ArmController.prototype.renderArmVisualization = function() {
-            var svg = document.getElementById('armDiagram');
-            svg.innerHTML = '';
 
-            this.updateArmStatusIndicators();
+// Add these new methods to your ArmController prototype:
 
-            // Draw base platform
-            var base = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-            base.setAttribute('x', '80');
-            base.setAttribute('y', '140');
-            base.setAttribute('width', '20');
-            base.setAttribute('height', '15');
-            base.setAttribute('fill', '#007bff');
-            base.setAttribute('rx', '2');
-            svg.appendChild(base);
+ArmController.prototype.setupViewToggle = function() {
+    var self = this;
+    
+    document.getElementById('topViewBtn').addEventListener('click', function() {
+        self.switchView('top');
+    });
+    
+    document.getElementById('sideViewBtn').addEventListener('click', function() {
+        self.switchView('side');
+    });
+};
 
-            // Starting position and angle
-            var x = 90, y = 140;
-            var segmentLength = 25;
+ArmController.prototype.switchView = function(view) {
+    this.currentView = view;
+    
+    // Update button states
+    document.getElementById('topViewBtn').className = view === 'top' ? 'view-btn active' : 'view-btn';
+    document.getElementById('sideViewBtn').className = view === 'side' ? 'view-btn active' : 'view-btn';
+    
+    this.renderArmVisualization();
+};
+
+ArmController.prototype.createSVGElement = function(tag, attributes) {
+    var element = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (var key in attributes) {
+        if (attributes.hasOwnProperty(key)) {
+            element.setAttribute(key, attributes[key]);
+        }
+    }
+    return element;
+};
+
+ArmController.prototype.createRotationArc = function(centerX, centerY, radius, startAngle, endAngle) {
+    var startX = centerX + Math.cos(startAngle) * radius;
+    var startY = centerY + Math.sin(startAngle) * radius;
+    var endX = centerX + Math.cos(endAngle) * radius;
+    var endY = centerY + Math.sin(endAngle) * radius;
+    
+    var largeArcFlag = Math.abs(endAngle - startAngle) > Math.PI ? 1 : 0;
+    var sweepFlag = endAngle > startAngle ? 1 : 0;
+    
+    return 'M ' + startX + ' ' + startY + ' A ' + radius + ' ' + radius + ' 0 ' + largeArcFlag + ' ' + sweepFlag + ' ' + endX + ' ' + endY;
+};
+
+ArmController.prototype.renderTopView = function(svg) {
+    var centerX = 90;
+    var centerY = 80;
+    var baseRadius = 15;
+    
+    // Draw base platform circle
+    var base = this.createSVGElement('circle', {
+        'cx': centerX,
+        'cy': centerY,
+        'r': baseRadius,
+        'fill': '#007bff',
+        'stroke': '#0056b3',
+        'stroke-width': '2'
+    });
+    svg.appendChild(base);
+    
+    // Calculate base rotation angle
+    var baseAngle = (this.config.joints[0].currentAngle - 90) * Math.PI / 180;
+    
+    // Draw direction indicator from center of base
+    var indicatorLength = 40;
+    var indicatorX = centerX + Math.cos(baseAngle) * indicatorLength;
+    var indicatorY = centerY + Math.sin(baseAngle) * indicatorLength;
+    
+    // Main arm direction line
+    var armLine = this.createSVGElement('line', {
+        'x1': centerX,
+        'y1': centerY,
+        'x2': indicatorX,
+        'y2': indicatorY,
+        'stroke': '#28a745',
+        'stroke-width': '4',
+        'stroke-linecap': 'round'
+    });
+    svg.appendChild(armLine);
+    
+    // Add arrowhead to show direction
+    var arrowSize = 6;
+    var arrowAngle1 = baseAngle + Math.PI * 0.8;
+    var arrowAngle2 = baseAngle - Math.PI * 0.8;
+    
+    var arrow1X = indicatorX + Math.cos(arrowAngle1) * arrowSize;
+    var arrow1Y = indicatorY + Math.sin(arrowAngle1) * arrowSize;
+    var arrow2X = indicatorX + Math.cos(arrowAngle2) * arrowSize;
+    var arrow2Y = indicatorY + Math.sin(arrowAngle2) * arrowSize;
+    
+    var arrowHead = this.createSVGElement('polygon', {
+        'points': indicatorX + ',' + indicatorY + ' ' + arrow1X + ',' + arrow1Y + ' ' + arrow2X + ',' + arrow2Y,
+        'fill': '#28a745'
+    });
+    svg.appendChild(arrowHead);
+    
+    // Draw rotation arc to show movement range
+    var arcRadius = 30;
+    var arcStart = -Math.PI / 2; // Start from top
+    var arcEnd = baseAngle;
+    
+    if (Math.abs(baseAngle) > 0.1) { // Only show arc if there's significant rotation
+        var arcPath = this.createRotationArc(centerX, centerY, arcRadius, arcStart, arcEnd);
+        var arc = this.createSVGElement('path', {
+            'd': arcPath,
+            'stroke': '#ffc107',
+            'stroke-width': '2',
+            'fill': 'none',
+            'stroke-dasharray': '3,2'
+        });
+        svg.appendChild(arc);
+    }
+    
+    // Add center dot
+    var centerDot = this.createSVGElement('circle', {
+        'cx': centerX,
+        'cy': centerY,
+        'r': '2',
+        'fill': '#333'
+    });
+    svg.appendChild(centerDot);
+    
+    // Add angle text
+    var angleText = this.createSVGElement('text', {
+        'x': centerX,
+        'y': centerY + 55,
+        'text-anchor': 'middle',
+        'font-size': '10',
+        'font-weight': 'bold',
+        'fill': '#333'
+    });
+    angleText.textContent = 'Base: ' + this.config.joints[0].currentAngle + '°';
+    svg.appendChild(angleText);
+    
+    // Add view label
+    var viewLabel = this.createSVGElement('text', {
+        'x': centerX,
+        'y': '15',
+        'text-anchor': 'middle',
+        'font-size': '12',
+        'font-weight': 'bold',
+        'fill': '#666'
+    });
+    viewLabel.textContent = 'TOP VIEW - Base Rotation';
+    svg.appendChild(viewLabel);
+};
+
+ArmController.prototype.renderSideView = function(svg) {
+    // Draw base platform
+    var base = this.createSVGElement('rect', {
+        'x': '80',
+        'y': '140',
+        'width': '20',
+        'height': '15',
+        'fill': '#007bff',
+        'rx': '2'
+    });
+    svg.appendChild(base);
+
+    // Starting position and angle (ignore base rotation for side view)
+    var x = 90, y = 140;
+    var segmentLength = 25;
+    var currentAngle = -Math.PI / 2; // Start vertical, ignore base rotation
+
+    // Add view label
+    var viewLabel = this.createSVGElement('text', {
+        'x': '90',
+        'y': '0',
+        'text-anchor': 'middle',
+        'font-size': '12',
+        'font-weight': 'bold',
+        'fill': '#666'
+    });
+    viewLabel.textContent = 'SIDE VIEW - Arm Profile';
+    svg.appendChild(viewLabel);
+
+    // Draw arm segments for joints 1 and beyond (skip base for side view)
+    for (var i = 1; i < this.config.joints.length; i++) {
+        var joint = this.config.joints[i];
+        
+        // Apply joint rotation
+        var jointRotation = (joint.currentAngle - 90) * Math.PI / 180;
+        currentAngle += jointRotation;
+        
+        // Calculate new position
+        var newX = x + Math.cos(currentAngle) * segmentLength;
+        var newY = y + Math.sin(currentAngle) * segmentLength;
+
+        // Draw arm segment
+        var line = this.createSVGElement('line', {
+            'x1': x,
+            'y1': y,
+            'x2': newX,
+            'y2': newY,
+            'stroke': '#007bff',
+            'stroke-width': '4',
+            'stroke-linecap': 'round'
+        });
+        svg.appendChild(line);
+
+        // Draw joint circle
+        var circle = this.createSVGElement('circle', {
+            'cx': x,
+            'cy': y,
+            'r': '4',
+            'fill': joint.currentAngle === 90 ? '#28a745' : '#0056b3'
+        });
+        svg.appendChild(circle);
+
+        // Position label
+        var labelOffsetX = 15;
+        var labelOffsetY = 4;
+        
+        if (newX < x) labelOffsetX = -15;
+        if (newY > y + 10) labelOffsetY = 15;
+        
+        var label = this.createSVGElement('text', {
+            'x': x + labelOffsetX,
+            'y': y + labelOffsetY,
+            'font-size': '9',
+            'font-weight': 'bold',
+            'fill': '#333',
+            'text-anchor': labelOffsetX < 0 ? 'end' : 'start'
+        });
+        label.textContent = joint.name;
+        svg.appendChild(label);
+
+        // Update position for next segment
+        x = newX;
+        y = newY;
+    }
+
+    // Draw end effector (same as your existing code)
+    if (this.config.armType >= 5 && this.config.joints.length > 4) {
+        var gripperJoint = this.config.joints[this.config.joints.length - 1];
+        
+        if (gripperJoint.name.toLowerCase().includes('gripper')) {
+            var gripperAngle = gripperJoint.currentAngle;
+            var openAmount = Math.abs(gripperAngle - 90) / 90 * 4;
             
-            // Get base rotation from first joint and start vertical
-            var baseJoint = this.config.joints[0];
-            var baseRotationAngle = (baseJoint.currentAngle - 90) * Math.PI / 180;
-            var currentAngle = -Math.PI / 2 + baseRotationAngle;
+            var gripperAngle1 = currentAngle + Math.PI / 2;
+            var gripperAngle2 = currentAngle - Math.PI / 2;
+            
+            var gripper1X1 = x + Math.cos(gripperAngle1) * 2;
+            var gripper1Y1 = y + Math.sin(gripperAngle1) * 2;
+            var gripper1X2 = gripper1X1 + Math.cos(gripperAngle1) * (6 + openAmount);
+            var gripper1Y2 = gripper1Y1 + Math.sin(gripperAngle1) * (6 + openAmount);
+            
+            var gripper2X1 = x + Math.cos(gripperAngle2) * 2;
+            var gripper2Y1 = y + Math.sin(gripperAngle2) * 2;
+            var gripper2X2 = gripper2X1 + Math.cos(gripperAngle2) * (6 + openAmount);
+            var gripper2Y2 = gripper2Y1 + Math.sin(gripperAngle2) * (6 + openAmount);
+            
+            var gripper1 = this.createSVGElement('line', {
+                'x1': gripper1X1,
+                'y1': gripper1Y1,
+                'x2': gripper1X2,
+                'y2': gripper1Y2,
+                'stroke': '#28a745',
+                'stroke-width': '3',
+                'stroke-linecap': 'round'
+            });
+            svg.appendChild(gripper1);
 
-            // Draw base rotation indicator
-            var baseIndicator = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            baseIndicator.setAttribute('cx', '90');
-            baseIndicator.setAttribute('cy', '140');
-            baseIndicator.setAttribute('r', '6');
-            baseIndicator.setAttribute('fill', baseJoint.currentAngle === 90 ? '#28a745' : '#ffc107');
-            baseIndicator.setAttribute('stroke', '#333');
-            baseIndicator.setAttribute('stroke-width', '1');
-            svg.appendChild(baseIndicator);
+            var gripper2 = this.createSVGElement('line', {
+                'x1': gripper2X1,
+                'y1': gripper2Y1,
+                'x2': gripper2X2,
+                'y2': gripper2Y2,
+                'stroke': '#28a745',
+                'stroke-width': '3',
+                'stroke-linecap': 'round'
+            });
+            svg.appendChild(gripper2);
+        } else {
+            var end = this.createSVGElement('circle', {
+                'cx': x,
+                'cy': y,
+                'r': '3',
+                'fill': '#28a745'
+            });
+            svg.appendChild(end);
+        }
+    } else {
+        var end = this.createSVGElement('circle', {
+            'cx': x,
+            'cy': y,
+            'r': '3',
+            'fill': '#28a745'
+        });
+        svg.appendChild(end);
+    }
 
-            // Add base label
-            var baseLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            baseLabel.setAttribute('x', '90');
-            baseLabel.setAttribute('y', '175');
-            baseLabel.setAttribute('font-size', '10');
-            baseLabel.setAttribute('font-weight', 'bold');
-            baseLabel.setAttribute('fill', '#333');
-            baseLabel.setAttribute('text-anchor', 'middle');
-            baseLabel.textContent = baseJoint.name;
-            svg.appendChild(baseLabel);
+    // Check if all joints are at home position (same as existing)
+    var allHome = true;
+    for (var i = 0; i < this.config.joints.length; i++) {
+        if (this.config.joints[i].currentAngle !== 90) {
+            allHome = false;
+            break;
+        }
+    }
 
-            // Draw arm segments for joints 1 and beyond
-            for (var i = 1; i < this.config.joints.length; i++) {
-                var joint = this.config.joints[i];
-                
-                // Apply joint rotation
-                var jointRotation = (joint.currentAngle - 90) * Math.PI / 180;
-                currentAngle += jointRotation;
-                
-                // Calculate new position
-                var newX = x + Math.cos(currentAngle) * segmentLength;
-                var newY = y + Math.sin(currentAngle) * segmentLength;
+    if (allHome) {
+        var homeLabel = this.createSVGElement('text', {
+            'x': '90',
+            'y': '10',
+            'font-size': '10',
+            'font-weight': 'bold',
+            'fill': '#28a745',
+            'text-anchor': 'middle'
+        });
+        homeLabel.textContent = 'HOME POSITION';
+        svg.appendChild(homeLabel);
+    }
+};
+  ArmController.prototype.renderArmVisualization = function() {
+    var svg = document.getElementById('armDiagram');
+    svg.innerHTML = '';
 
-                // Draw arm segment
-                var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                line.setAttribute('x1', x);
-                line.setAttribute('y1', y);
-                line.setAttribute('x2', newX);
-                line.setAttribute('y2', newY);
-                line.setAttribute('stroke', '#007bff');
-                line.setAttribute('stroke-width', '4');
-                line.setAttribute('stroke-linecap', 'round');
-                svg.appendChild(line);
+    this.updateArmStatusIndicators();
 
-                // Draw joint circle
-                var circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                circle.setAttribute('cx', x);
-                circle.setAttribute('cy', y);
-                circle.setAttribute('r', '4');
-                circle.setAttribute('fill', joint.currentAngle === 90 ? '#28a745' : '#0056b3');
-                svg.appendChild(circle);
-
-                // Position label relative to joint position with offset to avoid overlap
-                var labelOffsetX = 10;
-                var labelOffsetY = -20;
-                
-                // Adjust label position based on arm orientation to avoid overlaps
-                if (newX < x) labelOffsetX = -15;
-                if (newY > y + 10) labelOffsetY = 15;
-                
-                var label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                label.setAttribute('x', x + labelOffsetX);
-                label.setAttribute('y', y + labelOffsetY);
-                label.setAttribute('font-size', '9');
-                label.setAttribute('font-weight', 'bold');
-                label.setAttribute('fill', '#333');
-                label.setAttribute('text-anchor', labelOffsetX < 0 ? 'end' : 'start');
-                label.textContent = joint.name;
-                svg.appendChild(label);
-
-                // Update position for next segment
-                x = newX;
-                y = newY;
-            }
-
-            // Draw end effector
-            if (this.config.armType >= 5 && this.config.joints.length > 4) {
-                var gripperJoint = this.config.joints[this.config.joints.length - 1];
-                
-                if (gripperJoint.name.toLowerCase().includes('gripper')) {
-                    // Draw gripper
-                    var gripperAngle = gripperJoint.currentAngle;
-                    var openAmount = Math.abs(gripperAngle - 90) / 90 * 4;
-                    
-                    // Calculate gripper orientation perpendicular to last segment
-                    var gripperAngle1 = currentAngle + Math.PI / 2;
-                    var gripperAngle2 = currentAngle - Math.PI / 2;
-                    
-                    var gripper1X1 = x + Math.cos(gripperAngle1) * 2;
-                    var gripper1Y1 = y + Math.sin(gripperAngle1) * 2;
-                    var gripper1X2 = gripper1X1 + Math.cos(gripperAngle1) * (6 + openAmount);
-                    var gripper1Y2 = gripper1Y1 + Math.sin(gripperAngle1) * (6 + openAmount);
-                    
-                    var gripper2X1 = x + Math.cos(gripperAngle2) * 2;
-                    var gripper2Y1 = y + Math.sin(gripperAngle2) * 2;
-                    var gripper2X2 = gripper2X1 + Math.cos(gripperAngle2) * (6 + openAmount);
-                    var gripper2Y2 = gripper2Y1 + Math.sin(gripperAngle2) * (6 + openAmount);
-                    
-                    var gripper1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                    gripper1.setAttribute('x1', gripper1X1);
-                    gripper1.setAttribute('y1', gripper1Y1);
-                    gripper1.setAttribute('x2', gripper1X2);
-                    gripper1.setAttribute('y2', gripper1Y2);
-                    gripper1.setAttribute('stroke', '#28a745');
-                    gripper1.setAttribute('stroke-width', '3');
-                    gripper1.setAttribute('stroke-linecap', 'round');
-                    svg.appendChild(gripper1);
-
-                    var gripper2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                    gripper2.setAttribute('x1', gripper2X1);
-                    gripper2.setAttribute('y1', gripper2Y1);
-                    gripper2.setAttribute('x2', gripper2X2);
-                    gripper2.setAttribute('y2', gripper2Y2);
-                    gripper2.setAttribute('stroke', '#28a745');
-                    gripper2.setAttribute('stroke-width', '3');
-                    gripper2.setAttribute('stroke-linecap', 'round');
-                    svg.appendChild(gripper2);
-                } else {
-                    // Draw simple end effector
-                    var end = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                    end.setAttribute('cx', x);
-                    end.setAttribute('cy', y);
-                    end.setAttribute('r', '3');
-                    end.setAttribute('fill', '#28a745');
-                    svg.appendChild(end);
-                }
-            } else {
-                // Draw simple end point
-                var end = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                end.setAttribute('cx', x);
-                end.setAttribute('cy', y);
-                end.setAttribute('r', '3');
-                end.setAttribute('fill', '#28a745');
-                svg.appendChild(end);
-            }
-
-            // Check if all joints are at home position
-            var allHome = true;
-            for (var i = 0; i < this.config.joints.length; i++) {
-                if (this.config.joints[i].currentAngle !== 90) {
-                    allHome = false;
-                    break;
-                }
-            }
-
-            if (allHome) {
-                var homeLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                homeLabel.setAttribute('x', '90');
-                homeLabel.setAttribute('y', '10');
-                homeLabel.setAttribute('font-size', '12');
-                homeLabel.setAttribute('font-weight', 'bold');
-                homeLabel.setAttribute('fill', '#28a745');
-                homeLabel.setAttribute('text-anchor', 'middle');
-                homeLabel.textContent = 'HOME POSITION';
-                svg.appendChild(homeLabel);
-            }
-        };
-
+    if (this.currentView === 'top') {
+        this.renderTopView(svg);
+    } else {
+        this.renderSideView(svg);
+    }
+};
         ArmController.prototype.updateArmStatusIndicators = function() {
             var container = document.getElementById('armStatusIndicators');
             container.innerHTML = '';
